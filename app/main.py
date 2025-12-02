@@ -1,16 +1,34 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+import logging
+import sys
 
 from app.database import init_db
 from app.routers import auth, rides, drivers, cars, payments
+
+# Настройка логирования для Cloud Run
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s: %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db()
+    logger.info("Starting application...")
+    try:
+        await init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        # Не падаем при ошибке БД - дадим сервису запуститься
+        # и показать ошибку через API
     yield
     # Shutdown
+    logger.info("Shutting down...")
 
 
 app = FastAPI(
@@ -35,3 +53,11 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc"
     }
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    """
+    Health check endpoint для Cloud Run startup probe
+    """
+    return {"status": "ok"}
